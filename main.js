@@ -65,12 +65,16 @@ function afterLoaded(loader, resources) {
                 fieldSprite.tilePosition.x += offSetX;
                 fieldSprite.tilePosition.y += offSetY;
                 [fieldSprite.tilePosition.x, fieldSprite.tilePosition.y] = limitFieldSpritePosition(fieldSprite);
-                // zombies.forEach((zombie) => {
-                //     zombie.x += offSetX;
-                //     zombie.x = appropriatePosition(zombie.x, zombie.minX, zombie.maxX);
-                //     zombie.y += offSetY;
-                //     zombie.y = appropriatePosition(zombie.y, zombie.minY, zombie.maxY);
-                // });
+                zombies.forEach((zombie, index) => {
+                    zombie.x += offSetX;
+                    zombie.x = appropriatePosition(zombie.x, zombie.minX, zombie.maxX);
+                    if (!index) {
+                        console.log('maxX:' + zombie.maxX + ' ---- minX: ' + zombie.minX);
+                        console.log('x:' + zombie.x);
+                    }
+                    zombie.y += offSetY;
+                    zombie.y = appropriatePosition(zombie.y, zombie.minY, zombie.maxY);
+                });
                 this.oldPosition = newPosition;
             }
         })
@@ -82,13 +86,17 @@ function afterLoaded(loader, resources) {
         const zombieTexture = resources['zombie'].texture;
         const zombie = PIXI.Sprite.from(zombieTexture);
         zombie.anchor.set(0.5);
-        zombie.x = x < 50 ? x + 100 : x > (appWidth - 25) ? x - 100 : x;
-        zombie.y = y < 250 ? y + 250 : y > (appHeight - 50) ? y - 250 : y;
-        // zombie.maxX = zombie.x + (fieldTexture.width - (appWidth - fieldSprite.tilePosition.x)); // the remain length on the right
-        // zombie.minX = zombie.x + fieldSprite.tilePosition.x;
-        // zombie.maxY = zombie.y + (fieldTexture.height - (appHeight - fieldSprite.tilePosition.y)); // the remain height on bottom
-        // zombie.minY = zombie.y + fieldSprite.tilePosition.y;
         zombie.scale.set(0.3);
+        x = x < 75 ? x + 75 : x;
+        x = x > (appWidth - 75) ? x - 75 : x;
+        zombie.x = x;
+        y = y < 325 ? y + 325 : y;
+        y = y > (appHeight - 100) ? y - 100 : y;
+        zombie.y = y;
+        zombie.maxX = zombie.x - fieldSprite.tilePosition.x;
+        zombie.minX = zombie.x - (fieldTexture.width - (appWidth - fieldSprite.tilePosition.x)); // the remain length on the right
+        zombie.maxY = zombie.y - fieldSprite.tilePosition.y;
+        zombie.minY = zombie.y - (fieldTexture.height - (appHeight - fieldSprite.tilePosition.y)); // the remain height on bottom
         zombies.push(zombie);
         app.stage.addChild(zombie);
     }
