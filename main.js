@@ -1,5 +1,8 @@
 const appWidth = 480;
 const appHeight = 720;
+let startCountingDown = true;
+let countDownTime = 30;
+let countDownInterval;
 let app = new PIXI.Application({
     width: appWidth,
     height: appHeight
@@ -13,7 +16,9 @@ loader
     .add('field', 'assets/field.jpg')
     .add('aim', 'assets/aim.svg')
     .add('fireBtn', 'assets/fire-btn.svg')
-    .add('zombie', 'assets/zombie.png')
+    .add('zombie', 'assets/zombie.svg')
+    .add('fail', 'assets/fail.png')
+    .add('success', 'assets/success.png')
     .load(afterLoaded)
 
 function appropriatePosition(current, min, max) {
@@ -47,7 +52,19 @@ function afterLoaded(loader, resources) {
             // to get position
             this.data = event.data;
             this.oldPosition = this.data.getLocalPosition(this.parent);
-            this.dragging = true
+            this.dragging = true;
+
+            if (startCountingDown) {
+                startCountingDown = false;
+                countDownInterval = setInterval(() => {
+                    --countDownTime;
+                    timer.text = countDownTime;
+                    if (!countDownTime) {
+                        clearInterval(countDownInterval);
+                        onEnding();
+                    }
+                }, 1000);
+            }
         })
         .on('pointerup', function () {
             this.dragging = false;
@@ -68,10 +85,6 @@ function afterLoaded(loader, resources) {
                 zombies.forEach((zombie, index) => {
                     zombie.x += offSetX;
                     zombie.x = appropriatePosition(zombie.x, zombie.minX, zombie.maxX);
-                    if (!index) {
-                        console.log('maxX:' + zombie.maxX + ' ---- minX: ' + zombie.minX);
-                        console.log('x:' + zombie.x);
-                    }
                     zombie.y += offSetY;
                     zombie.y = appropriatePosition(zombie.y, zombie.minY, zombie.maxY);
                 });
@@ -79,26 +92,26 @@ function afterLoaded(loader, resources) {
             }
         })
 
-    app.stage.addChild(fieldSprite);
+    container.addChild(fieldSprite);
 
     // zombie
     function createZombie(x, y) {
         const zombieTexture = resources['zombie'].texture;
         const zombie = PIXI.Sprite.from(zombieTexture);
         zombie.anchor.set(0.5);
-        zombie.scale.set(0.3);
+        zombie.scale.set(0.5);
         x = x < 75 ? x + 75 : x;
-        x = x > (appWidth - 75) ? x - 75 : x;
+        x = x > (appWidth - 100) ? x - 100 : x;
         zombie.x = x;
         y = y < 325 ? y + 325 : y;
-        y = y > (appHeight - 100) ? y - 100 : y;
+        y = y > (appHeight - 300) ? y - 300 : y;
         zombie.y = y;
         zombie.maxX = zombie.x - fieldSprite.tilePosition.x;
         zombie.minX = zombie.x - (fieldTexture.width - (appWidth - fieldSprite.tilePosition.x)); // the remain length on the right
         zombie.maxY = zombie.y - fieldSprite.tilePosition.y;
         zombie.minY = zombie.y - (fieldTexture.height - (appHeight - fieldSprite.tilePosition.y)); // the remain height on bottom
         zombies.push(zombie);
-        app.stage.addChild(zombie);
+        container.addChild(zombie);
     }
     for (let i = 0; i < 5; i++) {
         createZombie(
@@ -115,7 +128,23 @@ function afterLoaded(loader, resources) {
     aimSprite.x = app.screen.width / 2;
     aimSprite.y = app.screen.height / 2;
     aimSprite.anchor.set(0.5);
-    app.stage.addChild(aimSprite);
+    const aimPoint = new PIXI.Point(aimSprite.x, aimSprite.y);
+    container.addChild(aimSprite);
+
+
+    // header
+    const headerText = new PIXI.Text('OBJECT: KILL ALL ZOMBIES', new PIXI.TextStyle({}));
+    const zombieCountText = new PIXI.Text('0/5', new PIXI.TextStyle({
+        fill: 'red'
+    }));
+    zombieCountText.x = headerText.width + 10;
+    container.addChild(headerText);
+    container.addChild(zombieCountText);
+
+    // timer
+    const timer = new PIXI.Text(`${countDownTime}`);
+    timer.y = 40;
+    container.addChild(timer);
 
     // fire button image
     const fireBtnTexture = resources['fireBtn'].texture;
@@ -130,13 +159,41 @@ function afterLoaded(loader, resources) {
         fireBtnSprite.width = 100;
         fireBtnSprite.height = 100;
         aimSprite.y -= 30;
+        for (let i = 0; i < zombies.length; i++) {
+            if (zombies[i].containsPoint(aimPoint)) {
+                const z = zombies[i];
+                zombies.splice(i, 1);
+                container.removeChild(z);
+                zombieCountText.text = `${5 - zombies.length}/5`;
+                break;
+            }
+        }
+        if (!zombies.length) {
+            clearInterval(countDownInterval);
+            onEnding();
+        }
         setTimeout(() => {
             fireBtnSprite.width = 80;
             fireBtnSprite.height = 80;
             aimSprite.y = app.screen.height / 2;
         },100);
     });
-    app.stage.addChild(fireBtnSprite);
+    container.addChild(fireBtnSprite);
 
+    const onEnding = () => {
+        container.children.forEach((c) => {
+            c.alpha = 0.5;
+            c.interactive = false;
+        });
+        container.removeChild(aimSprite);
+        const texture = resources[zombies.length ? 'fail' : 'success'].texture;
+        const sprite = PIXI.Sprite.from(texture);
+        sprite.anchor.set(0.5);
+        sprite.width = 320;
+        sprite.height = 280;
+        sprite.x = appWidth/2;
+        sprite.y = appHeight/2;
+        container.addChild(sprite);
+    }
 }
 
