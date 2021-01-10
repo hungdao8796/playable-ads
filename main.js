@@ -30,19 +30,16 @@ function afterLoaded(loader, resources) {
     // field background
     const fieldTexture = resources['field'].texture;
     const fieldSprite = new PIXI.TilingSprite(fieldTexture, fieldTexture.width, fieldTexture.height);
-    fieldSprite.interactive = true;
     fieldSprite.tilePosition.y += -300;
     fieldSprite.tilePosition.x += -200;
 
-    const limitFieldSpritePosition = (tileSprite) => {
+    const limitFieldSpritePosition = (newX, newY, tileSprite) => {
         const maxTileSpriteTilePositionX = 0;
         const minTileSpriteTilePositionX = -(tileSprite.width - appWidth);
         const maxTileSpriteTilePositionY = 0;
         const minTileSpriteTilePositionY = -(tileSprite.height - appHeight);
-        let x = tileSprite.tilePosition.x;
-        let y = tileSprite.tilePosition.y;
 
-        return [appropriatePosition(x, minTileSpriteTilePositionX, maxTileSpriteTilePositionX), appropriatePosition(y, minTileSpriteTilePositionY, maxTileSpriteTilePositionY)];
+        return [appropriatePosition(newX, minTileSpriteTilePositionX, maxTileSpriteTilePositionX), appropriatePosition(newY, minTileSpriteTilePositionY, maxTileSpriteTilePositionY)];
     }
 
     fieldSprite
@@ -53,18 +50,6 @@ function afterLoaded(loader, resources) {
             this.data = event.data;
             this.oldPosition = this.data.getLocalPosition(this.parent);
             this.dragging = true;
-
-            if (startCountingDown) {
-                startCountingDown = false;
-                countDownInterval = setInterval(() => {
-                    --countDownTime;
-                    timer.text = countDownTime;
-                    if (!countDownTime) {
-                        clearInterval(countDownInterval);
-                        onEnding();
-                    }
-                }, 1000);
-            }
         })
         .on('pointerup', function () {
             this.dragging = false;
@@ -77,16 +62,28 @@ function afterLoaded(loader, resources) {
         .on('pointermove', function () {
             if (this.dragging) {
                 const newPosition = this.data.getLocalPosition(this.parent);
+
+                // calculate distance changes
                 const offSetX = newPosition.x - this.oldPosition.x;
                 const offSetY = newPosition.y - this.oldPosition.y;
-                fieldSprite.tilePosition.x += offSetX;
-                fieldSprite.tilePosition.y += offSetY;
-                [fieldSprite.tilePosition.x, fieldSprite.tilePosition.y] = limitFieldSpritePosition(fieldSprite);
+
+                // calculate new til position of back field
+                let newFieldSpriteTileX = fieldSprite.tilePosition.x + offSetX;
+                let newFieldSpriteTileY = fieldSprite.tilePosition.y + offSetY;
+
+                // limit scroll to border of field image only
+                [newFieldSpriteTileX, newFieldSpriteTileY] = limitFieldSpritePosition(newFieldSpriteTileX, newFieldSpriteTileY, fieldSprite);
+
+                // calculate real change after limit
+                const realOffsetX = newFieldSpriteTileX - fieldSprite.tilePosition.x;
+                const realOffsetY = newFieldSpriteTileY - fieldSprite.tilePosition.y;
+                fieldSprite.tilePosition.x = newFieldSpriteTileX;
+                fieldSprite.tilePosition.y = newFieldSpriteTileY;
+
+                // zombie should move along with back field image
                 zombies.forEach((zombie, index) => {
-                    zombie.x += offSetX;
-                    zombie.x = appropriatePosition(zombie.x, zombie.minX, zombie.maxX);
-                    zombie.y += offSetY;
-                    zombie.y = appropriatePosition(zombie.y, zombie.minY, zombie.maxY);
+                    zombie.x += realOffsetX;
+                    zombie.y += realOffsetY;
                 });
                 this.oldPosition = newPosition;
             }
@@ -106,10 +103,16 @@ function afterLoaded(loader, resources) {
         y = y < 325 ? y + 325 : y;
         y = y > (appHeight - 300) ? y - 300 : y;
         zombie.y = y;
-        zombie.maxX = zombie.x - fieldSprite.tilePosition.x;
-        zombie.minX = zombie.x - (fieldTexture.width - (appWidth - fieldSprite.tilePosition.x)); // the remain length on the right
-        zombie.maxY = zombie.y - fieldSprite.tilePosition.y;
-        zombie.minY = zombie.y - (fieldTexture.height - (appHeight - fieldSprite.tilePosition.y)); // the remain height on bottom
+
+        // create some extra properties that will control movement :
+        // create a random direction in radians. This is a number between 0 and PI*2 which is the equivalent of 0 - 360 degrees
+        zombie.direction = Math.random() * Math.PI * 2;
+
+        // this number will be used to modify the direction of the zombie over time
+        zombie.turningSpeed = Math.random() - 0.8;
+
+        // create a random speed for the zombie between 2 - 4
+        zombie.speed = 0.08 + Math.random() * 0.16;
         zombies.push(zombie);
         container.addChild(zombie);
     }
@@ -129,7 +132,6 @@ function afterLoaded(loader, resources) {
     aimSprite.y = app.screen.height / 2;
     aimSprite.anchor.set(0.5);
     const aimPoint = new PIXI.Point(aimSprite.x, aimSprite.y);
-    container.addChild(aimSprite);
 
 
     // header
@@ -154,7 +156,7 @@ function afterLoaded(loader, resources) {
     fireBtnSprite.x = app.screen.width - 80;
     fireBtnSprite.y = app.screen.height - 80;
     fireBtnSprite.anchor.set(0.5);
-    fireBtnSprite.interactive = true;
+    // fireBtnSprite.interactive = true;
     fireBtnSprite.on('pointerdown', function () {
         fireBtnSprite.width = 100;
         fireBtnSprite.height = 100;
@@ -163,7 +165,15 @@ function afterLoaded(loader, resources) {
             if (zombies[i].containsPoint(aimPoint)) {
                 const z = zombies[i];
                 zombies.splice(i, 1);
-                container.removeChild(z);
+                const zombieDieInterval = setInterval(() => {
+                   if (z.rotation >= Math.PI * 0.5) {
+                       clearInterval(zombieDieInterval);
+                       container.removeChild(z);
+                   } else {
+                       z.rotation += Math.PI * 0.02;
+                   }
+                }, 5);
+
                 zombieCountText.text = `${5 - zombies.length}/5`;
                 break;
             }
@@ -178,7 +188,54 @@ function afterLoaded(loader, resources) {
             aimSprite.y = app.screen.height / 2;
         },100);
     });
-    container.addChild(fireBtnSprite);
+
+    container.children.forEach((c) => {
+        c.alpha = 0.5;
+        c.interactive = false;
+    });
+
+    const zombieMove = () => {
+        zombies.forEach((z) => {
+            z.x += Math.sin(z.direction) * z.speed;
+            z.y += Math.cos(z.direction) * z.speed;
+        });
+    }
+
+    const overlay = new PIXI.Sprite(PIXI.Texture.EMPTY);
+    overlay.width = app.screen.width;
+    overlay.height = app.screen.height;
+    overlay.interactive = true;
+
+
+    const startText = new PIXI.Text('Scrolling to start', new PIXI.TextStyle({}));
+    startText.anchor.set(0.5);
+    startText.x = app.screen.width/2;
+    startText.y = app.screen.height/2;
+    container.addChild(startText);
+
+    overlay.on('pointerdown', function () {
+        container.children.forEach((c) => {
+            c.alpha = 1;
+        });
+        container.removeChild(startText);
+        container.addChild(aimSprite);
+        container.addChild(fireBtnSprite);
+        fieldSprite.interactive = true;
+        fireBtnSprite.interactive = true;
+        app.ticker.add(zombieMove);
+
+        countDownInterval = setInterval(() => {
+            --countDownTime;
+            timer.text = countDownTime;
+            if (!countDownTime) {
+                clearInterval(countDownInterval);
+                onEnding();
+            }
+        }, 1000);
+        container.removeChild(overlay);
+    });
+    container.addChild(overlay);
+
 
     const onEnding = () => {
         container.children.forEach((c) => {
@@ -186,6 +243,7 @@ function afterLoaded(loader, resources) {
             c.interactive = false;
         });
         container.removeChild(aimSprite);
+        container.removeChild(fireBtnSprite);
         const texture = resources[zombies.length ? 'fail' : 'success'].texture;
         const sprite = PIXI.Sprite.from(texture);
         sprite.anchor.set(0.5);
@@ -194,6 +252,7 @@ function afterLoaded(loader, resources) {
         sprite.x = appWidth/2;
         sprite.y = appHeight/2;
         container.addChild(sprite);
+        app.ticker.remove(zombieMove);
     }
 }
 
