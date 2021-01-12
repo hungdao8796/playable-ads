@@ -1,8 +1,9 @@
 const appWidth = 480;
 const appHeight = 720;
-let startCountingDown = true;
 let countDownTime = 30;
 let countDownInterval;
+let zoom = 1;
+const zombieScale = 0.5;
 let app = new PIXI.Application({
     width: appWidth,
     height: appHeight
@@ -19,6 +20,8 @@ loader
     .add('zombie', 'assets/zombie.svg')
     .add('fail', 'assets/fail.png')
     .add('success', 'assets/success.png')
+    .add('scroll1', 'assets/rectangle1.png')
+    .add('scroll2', 'assets/rectangle2.png')
     .load(afterLoaded)
 
 function appropriatePosition(current, min, max) {
@@ -35,9 +38,9 @@ function afterLoaded(loader, resources) {
 
     const limitFieldSpritePosition = (newX, newY, tileSprite) => {
         const maxTileSpriteTilePositionX = 0;
-        const minTileSpriteTilePositionX = -(tileSprite.width - appWidth);
+        const minTileSpriteTilePositionX = -(tileSprite.width - appWidth) * zoom;
         const maxTileSpriteTilePositionY = 0;
-        const minTileSpriteTilePositionY = -(tileSprite.height - appHeight);
+        const minTileSpriteTilePositionY = -(tileSprite.height - appHeight) * zoom;
 
         return [appropriatePosition(newX, minTileSpriteTilePositionX, maxTileSpriteTilePositionX), appropriatePosition(newY, minTileSpriteTilePositionY, maxTileSpriteTilePositionY)];
     }
@@ -96,7 +99,7 @@ function afterLoaded(loader, resources) {
         const zombieTexture = resources['zombie'].texture;
         const zombie = PIXI.Sprite.from(zombieTexture);
         zombie.anchor.set(0.5);
-        zombie.scale.set(0.5);
+        zombie.scale.set(zombieScale);
         x = x < 75 ? x + 75 : x;
         x = x > (appWidth - 100) ? x - 100 : x;
         zombie.x = x;
@@ -189,6 +192,56 @@ function afterLoaded(loader, resources) {
         },100);
     });
 
+    // zoom bar
+    const scroll1Texture = resources['scroll1'].texture;
+    const scroll1Sprite = PIXI.Sprite.from(scroll1Texture);
+    scroll1Sprite.x = app.screen.width - 30;
+    scroll1Sprite.y = 200;
+    scroll1Sprite.anchor.set(0.5);
+    container.addChild(scroll1Sprite);
+
+    const scroll2Texture = resources['scroll2'].texture;
+    const scroll2Sprite = PIXI.Sprite.from(scroll2Texture);
+    scroll2Sprite.x = app.screen.width - 30;
+    scroll2Sprite.y = scroll1Sprite.y + scroll1Sprite.height/2;
+    scroll2Sprite.anchor.set(0.5);
+    scroll2Sprite
+      .on('pointerdown', function (event) {
+          // start dragging event
+          // store data of dragging event
+          // to get position
+          this.zoomData = event.data;
+          this.dragging = true;
+      })
+      .on('pointerup', function () {
+          this.dragging = false;
+          this.zoomData = null;
+      })
+      .on('pointerupoutside', function () {
+          this.dragging = false;
+          this.zoomData = null;
+      })
+      .on('pointermove', function () {
+          if (this.dragging) {
+              const newPosition = this.zoomData.getLocalPosition(this.parent);
+
+              // calculate distance changes
+              const min = scroll1Sprite.y - scroll1Sprite.height / 2;
+              const max = scroll1Sprite.y + scroll1Sprite.height / 2;
+              scroll2Sprite.y = newPosition.y > max ? max : newPosition.y < min ? min : newPosition.y;
+              const newZoom = (max - scroll2Sprite.y) / scroll1Sprite.height + 1;
+              fieldSprite.transform.scale.set(newZoom);
+              let newX = fieldSprite.tilePosition.x - (newZoom - zoom) * appWidth / 2;
+              let newY = fieldSprite.tilePosition.y - (newZoom - zoom) * appHeight / 2;
+              [newX, newY] = limitFieldSpritePosition(newX, newY, fieldSprite);
+              fieldSprite.tilePosition.x = newX;
+              fieldSprite.tilePosition.y = newY;
+              zombies.forEach(z => z.transform.scale.set(zoom * zombieScale));
+              zoom = newZoom;
+          }
+      });
+    container.addChild(scroll2Sprite);
+
     container.children.forEach((c) => {
         c.alpha = 0.5;
         c.interactive = false;
@@ -207,7 +260,7 @@ function afterLoaded(loader, resources) {
     overlay.interactive = true;
 
 
-    const startText = new PIXI.Text('Scrolling to start', new PIXI.TextStyle({}));
+    const startText = new PIXI.Text('Scroll to move your aim', new PIXI.TextStyle({}));
     startText.anchor.set(0.5);
     startText.x = app.screen.width/2;
     startText.y = app.screen.height/2;
@@ -222,6 +275,7 @@ function afterLoaded(loader, resources) {
         container.addChild(fireBtnSprite);
         fieldSprite.interactive = true;
         fireBtnSprite.interactive = true;
+        scroll2Sprite.interactive = true;
         app.ticker.add(zombieMove);
 
         countDownInterval = setInterval(() => {
